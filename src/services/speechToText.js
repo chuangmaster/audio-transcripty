@@ -3,6 +3,8 @@
  * 前端集成版本
  */
 
+import { speechToTextConfig } from '../config/speechToTextConfig.js'
+
 class SpeechToTextService {
   constructor(apiKey) {
     this.apiKey = apiKey
@@ -180,8 +182,56 @@ class SpeechToTextService {
           }),
         }
       )
-      // API 密鑰驗證成功 (即使請求失敗也表示 API 密鑰有效)
-      return response.status !== 403
+      // 嘗試讀取並解析回應 body，以辨識常見的『金鑰無效』錯誤訊息
+      let bodyText = ''
+      let jsonBody = null
+      try {
+        bodyText = await response.text()
+        try { jsonBody = JSON.parse(bodyText) } catch (e) { /* not json */ }
+      } catch (err) {
+        bodyText = `<unable to read body: ${err.message}>`
+      }
+      console.log('Google validateApiKey response:', response.status, bodyText)
+
+      // 如果啟用嚴格驗證，只接受 HTTP 2xx
+      if (speechToTextConfig.strictValidation) {
+        return response.ok
+      }
+
+      // 如果回傳 401/403 則肯定無效
+      if (response.status === 401 || response.status === 403) {
+        return false
+      }
+
+      // 嘗試從回傳內容判定是否明確說明金鑰無效
+      const message = (
+        (jsonBody && (jsonBody.error?.message || jsonBody.message)) ||
+        String(bodyText || '')
+      ).toLowerCase()
+
+      const invalidPatterns = [
+        'api key not valid',
+        'invalid api key',
+        'api key is invalid',
+        'invalid api key',
+        'not authorized',
+        'forbidden',
+        'permission denied',
+        'request had invalid authentication credentials'
+      ]
+
+      for (const p of invalidPatterns) {
+        if (message.includes(p)) {
+          return false
+        }
+      }
+
+      // 其他狀況: 若為 2xx 視為有效；若為 400 且沒有明確指出金鑰問題，視為可能有效
+      if (response.ok) return true
+      if (response.status === 400) return true
+
+      // 預設回傳 false（保守）
+      return false
     } catch (error) {
       console.error('API 密鑰驗證失敗:', error)
       return false

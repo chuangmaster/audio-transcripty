@@ -3,6 +3,8 @@
  * 支援大檔案分割和批次上傳
  */
 
+import { speechToTextConfig } from '../config/speechToTextConfig.js'
+
 class OpenAIWhisperService {
   constructor(apiKey) {
     this.apiKey = apiKey
@@ -23,6 +25,35 @@ class OpenAIWhisperService {
           'Authorization': `Bearer ${this.apiKey}`,
         }
       })
+
+      // 嘗試讀取並解析回應 body
+      let bodyText = ''
+      let jsonBody = null
+      try {
+        bodyText = await response.text()
+        try { jsonBody = JSON.parse(bodyText) } catch (e) { /* not json */ }
+      } catch (err) {
+        bodyText = `<unable to read body: ${err.message}>`
+      }
+      console.log('OpenAI validateApiKey response:', response.status, bodyText)
+
+      if (speechToTextConfig.strictValidation) {
+        return response.ok
+      }
+
+      // 如果 HTTP 回傳 401/403 或回應 body 明確指出金鑰無效，回傳 false
+      if (response.status === 401 || response.status === 403) return false
+
+      const message = (
+        (jsonBody && (jsonBody.error?.message || jsonBody.message)) ||
+        String(bodyText || '')
+      ).toLowerCase()
+
+      if (message.includes('invalid') || message.includes('invalid api key') || message.includes('invalid_api_key') || message.includes('unauthorized')) {
+        return false
+      }
+
+      // 其他情況以 response.ok 判定
       return response.ok
     } catch (error) {
       console.error('API 密鑰驗證失敗:', error)

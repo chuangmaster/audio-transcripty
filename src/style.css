@@ -83,6 +83,39 @@ body {
   animation: fadeInSlide 0.5s ease;
 }
 
+/* API key input area */
+.api-inputs {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.api-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255,255,255,0.06);
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.api-input input[type="text"] {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  min-width: 260px;
+  background: rgba(255,255,255,0.04);
+  color: white;
+}
+
+.api-input label {
+  font-weight: 600;
+  color: rgba(255,255,255,0.8);
+  margin-right: 6px;
+}
+
 .status-badge.success {
   background: rgba(76, 175, 80, 0.2);
   color: #4CAF50;

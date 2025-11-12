@@ -100,6 +100,9 @@ export const speechToTextConfig = {
       maxDuration: Infinity,
     },
   },
+
+  // 驗證嚴格模式: 如果為 true，驗證 API 金鑰時僅接受 HTTP 2xx 回應
+  strictValidation: false,
 }
 
 export default speechToTextConfig

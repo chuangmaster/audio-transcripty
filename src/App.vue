@@ -28,6 +28,21 @@
             OpenAI: {{ apiStatus.openaiAvailable ? '✓' : '✗' }}
           </span>
         </div>
+        
+          <!-- 當任一 API 未連線時，顯示輸入框讓使用者手動輸入金鑰 -->
+          <div class="api-inputs">
+            <div v-if="!apiStatus.googleAvailable" class="api-input">
+              <label>Google API Key</label>
+              <input type="text" v-model="googleKeyInput" placeholder="輸入 Google API Key" />
+              <button class="btn btn-secondary" @click="saveGoogleKey" :disabled="!googleKeyInput || apiStatus.checking">儲存並重試</button>
+            </div>
+
+            <div v-if="!apiStatus.openaiAvailable" class="api-input">
+              <label>OpenAI API Key</label>
+              <input type="text" v-model="openaiKeyInput" placeholder="輸入 OpenAI API Key" />
+              <button class="btn btn-secondary" @click="saveOpenAIKey" :disabled="!openaiKeyInput || apiStatus.checking">儲存並重試</button>
+            </div>
+          </div>
       </div>
 
       <!-- 引擎選擇器 -->
@@ -296,6 +311,26 @@ const errorMessage = ref('')
 const processingStatus = ref('')
 const processingProgress = ref(0)
 const selectedFile = ref(null) // 上傳的檔案
+// API key inputs (allow user to enter keys at runtime)
+const googleKeyInput = ref(speechToTextConfig.googleApiKey && speechToTextConfig.googleApiKey !== 'YOUR_API_KEY_HERE' ? speechToTextConfig.googleApiKey : '')
+const openaiKeyInput = ref(speechToTextConfig.openaiApiKey && speechToTextConfig.openaiApiKey !== 'YOUR_API_KEY_HERE' ? speechToTextConfig.openaiApiKey : '')
+
+const saveGoogleKey = async () => {
+  if (!googleKeyInput.value) return
+  // 更新配置並重新初始化
+  speechToTextConfig.googleApiKey = googleKeyInput.value
+  apiStatus.checking = true
+  apiStatus.error = null
+  await initializeSpeechService()
+}
+
+const saveOpenAIKey = async () => {
+  if (!openaiKeyInput.value) return
+  speechToTextConfig.openaiApiKey = openaiKeyInput.value
+  apiStatus.checking = true
+  apiStatus.error = null
+  await initializeSpeechService()
+}
 
 // 計算可用引擎
 const availableEngines = computed(() => {
@@ -349,6 +384,9 @@ const startRecording = async () => {
     } else if (selectedEngine.value === 'google') {
       // 使用 Google 的傳統錄音方式
       startGoogleRecording()
+    } else if (selectedEngine.value === 'openai') {
+      // 使用 OpenAI Whisper 錄音（先錄製本地音訊，再上傳至 Whisper）
+      startOpenAIRecording()
     }
   } catch (error) {
     console.error('錄音失敗:', error)
@@ -479,12 +517,59 @@ const startGoogleRecording = async () => {
   }, 1000)
 }
 
+// OpenAI 錄音：與 Google 類似，錄製音訊然後上傳到 OpenAI Whisper
+const startOpenAIRecording = async () => {
+  if (!openaiWhisperService) {
+    errorMessage.value = 'OpenAI Whisper 服務未初始化或金鑰無效'
+    return
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+
+  mediaRecorder = new MediaRecorder(stream)
+  audioChunks = []
+
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data.size > 0) {
+      audioChunks.push(event.data)
+    }
+  }
+
+  mediaRecorder.onstop = async () => {
+    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+    const audioUrl = URL.createObjectURL(audioBlob)
+
+    // 停止所有音軌
+    stream.getTracks().forEach(track => track.stop())
+
+    // 使用 OpenAI Whisper 轉錄
+    await processAudioToTextOpenAI(audioBlob, audioUrl)
+  }
+
+  mediaRecorder.start()
+  isRecording.value = true
+  recordingStartTime = Date.now()
+
+  // 開始計時
+  recordingTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000)
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0')
+    const seconds = (elapsed % 60).toString().padStart(2, '0')
+    recordingTime.value = `${minutes}:${seconds}`
+  }, 1000)
+}
+
 // 停止錄音
 const stopRecording = () => {
   if (selectedEngine.value === 'webSpeech') {
     webSpeechService.stop()
     isRecording.value = false
   } else if (selectedEngine.value === 'google') {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop()
+      isRecording.value = false
+    }
+  } else if (selectedEngine.value === 'openai') {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop()
       isRecording.value = false
@@ -496,6 +581,71 @@ const stopRecording = () => {
     recordingTimer = null
   }
   recordingTime.value = '00:00'
+}
+
+// 使用 OpenAI Whisper 轉錄錄製好的音訊
+const processAudioToTextOpenAI = async (audioBlob, audioUrl) => {
+  if (!apiStatus.initialized || !openaiWhisperService) {
+    errorMessage.value = 'OpenAI Whisper 服務未初始化，請檢查配置'
+    const recording = {
+      audioUrl,
+      audioBlob,
+      transcript: '[等待 OpenAI 初始化]',
+      summary: null,
+      date: new Date().toLocaleString('zh-TW'),
+      language: selectedLanguage.value,
+      engine: 'openai'
+    }
+    recordings.value.unshift(recording)
+    return
+  }
+
+  isProcessing.value = true
+  processingStatus.value = '準備音訊檔案...'
+  processingProgress.value = 0
+
+  try {
+    const languageCode = selectedLanguage.value.split('-')[0]
+    const transcript = await openaiWhisperService.transcribeAudio(
+      audioBlob,
+      languageCode,
+      (progress) => {
+        processingStatus.value = progress.status
+        processingProgress.value = progress.progress
+      }
+    )
+
+    const recording = {
+      audioUrl,
+      audioBlob,
+      transcript,
+      summary: null,
+      date: new Date().toLocaleString('zh-TW'),
+      language: selectedLanguage.value,
+      engine: 'openai'
+    }
+
+    recordings.value.unshift(recording)
+    errorMessage.value = ''
+  } catch (error) {
+    console.error('OpenAI 轉換失敗:', error)
+    errorMessage.value = `語音轉文字失敗: ${error.message}`
+
+    const recording = {
+      audioUrl,
+      audioBlob,
+      transcript: `[轉換失敗] ${error.message}`,
+      summary: null,
+      date: new Date().toLocaleString('zh-TW'),
+      language: selectedLanguage.value,
+      engine: 'openai'
+    }
+    recordings.value.unshift(recording)
+  } finally {
+    isProcessing.value = false
+    processingStatus.value = ''
+    processingProgress.value = 0
+  }
 }
 
 // 處理語音轉文字
