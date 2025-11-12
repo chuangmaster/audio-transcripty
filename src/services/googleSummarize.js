@@ -13,7 +13,7 @@ class GoogleSummarizeService {
     if (!text || !text.trim()) throw new Error('沒有要摘要的文字')
     if (!this.apiKey) throw new Error('Google API Key 未設定')
 
-    const fullPrompt = (options.userPrompt || `請以繁體中文摘要下列內容，保留重要重點與結論，並盡量保持簡潔：\n\n${text}`)
+    const fullPrompt = (options.userPrompt || `請以繁體中文摘要下列內容，保留重要重點與結論，並盡量保持簡潔，不需要使用markdown格式：\n\n${text}`)
       .replace(/\n\n/g, '\n'); // Gemini API 對於連續換行較敏感
 
     // Google Generative AI API 的 generateContent 請求格式

@@ -181,8 +181,20 @@
             <button @click="downloadTranscript(recording)" class="btn btn-secondary" :disabled="!recording.transcript">
               <span class="icon">⬇</span> 下載文字
             </button>
-            <button @click="generateSummary(recording)" class="btn btn-secondary" :disabled="!recording.transcript || recording.summary">
-              <span class="icon">📝</span> 生成摘要
+            <button 
+              @click="generateSummary(recording)" 
+              class="btn btn-secondary" 
+              :disabled="!recording.transcript || (recording.summary && !recording.summary.includes('失敗'))"
+            >
+              <span class="icon">📝</span> {{ recording.summary && !recording.summary.includes('失敗') ? '重新生成摘要' : '生成摘要' }}
+            </button>
+            <button 
+              v-if="recording.summary" 
+              @click="recording.summary = null" 
+              class="btn btn-secondary"
+              :title="'清除摘要'"
+            >
+              <span class="icon">🔄</span> 清除摘要
             </button>
             <button @click="deleteRecording(index)" class="btn btn-danger-outline">
               <span class="icon">🗑️</span> 刪除
@@ -823,7 +835,7 @@ const getEngineLabel = (engine) => {
 
 // 生成摘要（使用 SummarizeService 或 GoogleSummarizeService）
 const generateSummary = async (recording) => {
-  if (!recording.transcript || recording.summary) return
+  if (!recording.transcript) return
 
   // 判斷使用的 API 服務
   const isGoogleModel = summaryModel.value.startsWith('gemini')
@@ -856,6 +868,7 @@ const generateSummary = async (recording) => {
     processingStatus.value = ''
     processingProgress.value = 0
     isProcessing.value = prevProcessing
+    errorMessage.value = '' // 清除錯誤訊息
   } catch (error) {
     console.error('摘要失敗:', error)
     recording.summary = `[摘要失敗] ${error.message}`

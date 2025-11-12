@@ -14,7 +14,7 @@ class SummarizeService {
     if (!text || !text.trim()) throw new Error('沒有要摘要的文字')
     if (!this.apiKey) throw new Error('OpenAI API Key 未設定')
 
-    const systemPrompt = options.systemPrompt || '你是一個專業的摘要機器人，請以簡潔、條列或段落的方式產生摘要，語言請依照輸入要求。'
+    const systemPrompt = options.systemPrompt || '你是一個專業的摘要機器人，請以簡潔、條列或段落的方式產生摘要，語言請依照輸入要求。不需要使用markdown格式。'
     const userPrompt = options.userPrompt || `請以繁體中文摘要下列內容，保留重要重點與結論，並盡量保持簡潔：\n\n${text}`
 
     const payload = {
