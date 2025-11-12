@@ -63,6 +63,22 @@
           </button>
         </div>
       </div>
+
+      <!-- 摘要模型選擇 -->
+      <div class="summary-model-selector">
+        <label>選擇摘要模型：</label>
+        <div class="model-options">
+          <button 
+            v-for="m in summaryModelsOptions" 
+            :key="m.value"
+            @click="summaryModel = m.value"
+            :class="['model-btn', { active: summaryModel === m.value }]"
+            :title="m.value"
+          >
+            <span class="model-name">{{ m.label }}</span>
+          </button>
+        </div>
+      </div>
     </header>
 
     <main class="main-content">
@@ -193,12 +209,16 @@ import { ref, onUnmounted, reactive, computed } from 'vue'
 import SpeechToTextService from './services/speechToText.js'
 import { WebSpeechApiService } from './services/webSpeechApi.js'
 import OpenAIWhisperService from './services/openaiWhisper.js'
+import SummarizeService from './services/summarize.js'
+import GoogleSummarizeService from './services/googleSummarize.js'
 import { speechToTextConfig } from './config/speechToTextConfig.js'
 
 // API 服務初始化
 let speechToTextService = null
 let webSpeechService = null
 let openaiWhisperService = null
+let summarizeService = null
+let googleSummarizeService = null
 const apiStatus = reactive({
   initialized: false,
   error: null,
@@ -239,6 +259,14 @@ const initializeSpeechService = async () => {
         speechToTextService = null
         apiStatus.googleAvailable = false
       }
+      // 無論 Speech-to-Text 是否能初始化，只要有 Google Key 就可以建立 GoogleSummarizeService
+      try {
+        googleSummarizeService = new GoogleSummarizeService(googleKey)
+        console.log('GoogleSummarizeService 已建立')
+      } catch (e) {
+        console.warn('無法建立 GoogleSummarizeService:', e.message)
+        googleSummarizeService = null
+      }
     }
 
     // 初始化 OpenAI Whisper API
@@ -269,6 +297,14 @@ const initializeSpeechService = async () => {
         console.error('詳細錯誤:', error)
         openaiWhisperService = null
         apiStatus.openaiAvailable = false
+      }
+      // 無論 Whisper 是否能初始化，只要有 OpenAI Key 就可以建立 SummarizeService
+      try {
+        summarizeService = new SummarizeService(openaiKey)
+        console.log('SummarizeService 已建立')
+      } catch (e) {
+        console.warn('無法建立 SummarizeService:', e.message)
+        summarizeService = null
       }
     }
     console.log('=== OpenAI 初始化完成 ===')
@@ -306,6 +342,15 @@ const isProcessing = ref(false)
 const recordings = ref([])
 const selectedLanguage = ref('zh-TW')
 const selectedEngine = ref('webSpeech') // 預設使用 Web Speech API
+// 摘要模型設定
+const summaryModel = ref('gpt-3.5-turbo')
+const summaryModelsOptions = ref([
+  { value: 'gpt-4o-mini', label: 'OpenAI: gpt-4o-mini (快速)' },
+  { value: 'gpt-4o', label: 'OpenAI: gpt-4o (高品質)' },
+  { value: 'gpt-3.5-turbo', label: 'OpenAI: gpt-3.5-turbo (成本較低)' },
+  { value: 'gemini-2.5-flash-lite', label: 'Google: Gemini 2.5 Flash Lite (成本低、快速)' },
+  { value: 'gemini-2.5-flash', label: 'Google: Gemini 2.5 Flash (高品質)' }
+])
 const recordingTime = ref('00:00')
 const errorMessage = ref('')
 const processingStatus = ref('')
@@ -776,15 +821,49 @@ const getEngineLabel = (engine) => {
   return labels[engine] || engine
 }
 
-// 生成摘要
-const generateSummary = (recording) => {
+// 生成摘要（使用 SummarizeService 或 GoogleSummarizeService）
+const generateSummary = async (recording) => {
   if (!recording.transcript || recording.summary) return
-  
-  // 簡單的摘要生成 (取前100字)
-  const summary = recording.transcript.substring(0, 100) + (recording.transcript.length > 100 ? '...' : '')
-  recording.summary = summary
-  
-  // 實際應用中，可以使用 AI 服務來生成更智能的摘要
+
+  // 判斷使用的 API 服務
+  const isGoogleModel = summaryModel.value.startsWith('gemini')
+  const service = isGoogleModel ? googleSummarizeService : summarizeService
+
+  if (!service) {
+    const apiName = isGoogleModel ? 'Google' : 'OpenAI'
+    errorMessage.value = `摘要服務未初始化或 ${apiName} API Key 未設定`
+    return
+  }
+
+  try {
+    // 顯示暫時狀態
+    recording.summary = '正在生成摘要...'
+    const prevProcessing = isProcessing.value
+    isProcessing.value = true
+    processingStatus.value = `使用 ${summaryModel.value} 生成摘要...`
+    processingProgress.value = 10
+
+    // 建議的 options，可依需求調整
+    const options = {
+      temperature: 0.2,
+      max_tokens: 400,
+      userPrompt: `請以繁體中文摘要以下內容，列出重點與結論，盡量以條列方式呈現：\n\n${recording.transcript}`
+    }
+
+    const summary = await service.summarizeText(recording.transcript, summaryModel.value, options)
+
+    recording.summary = summary || '[AI 未回傳摘要]'
+    processingStatus.value = ''
+    processingProgress.value = 0
+    isProcessing.value = prevProcessing
+  } catch (error) {
+    console.error('摘要失敗:', error)
+    recording.summary = `[摘要失敗] ${error.message}`
+    errorMessage.value = `摘要失敗: ${error.message}`
+    isProcessing.value = false
+    processingStatus.value = ''
+    processingProgress.value = 0
+  }
 }
 
 // 刪除錄音
