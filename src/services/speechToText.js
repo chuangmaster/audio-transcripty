@@ -191,7 +191,6 @@ class SpeechToTextService {
       } catch (err) {
         bodyText = `<unable to read body: ${err.message}>`
       }
-      console.log('Google validateApiKey response:', response.status, bodyText)
 
       // 如果啟用嚴格驗證，只接受 HTTP 2xx
       if (speechToTextConfig.strictValidation) {

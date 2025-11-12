@@ -35,7 +35,6 @@ class OpenAIWhisperService {
       } catch (err) {
         bodyText = `<unable to read body: ${err.message}>`
       }
-      console.log('OpenAI validateApiKey response:', response.status, bodyText)
 
       if (speechToTextConfig.strictValidation) {
         return response.ok
