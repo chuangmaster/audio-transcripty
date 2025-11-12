@@ -1,0 +1,19 @@
+{
+  "name": "meeting-recorder",
+  "version": "1.0.0",
+  "description": "線上錄音並轉文字的服務（整合 Google Speech-to-Text API）",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "setup-env": "cp .env.example .env.local && echo '請編輯 .env.local 檔案並設定你的 Google API 密鑰'"
+  },
+  "dependencies": {
+    "vue": "^3.3.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^4.3.4",
+    "vite": "^4.4.9"
+  }
+}
