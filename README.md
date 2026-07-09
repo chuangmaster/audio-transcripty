@@ -1,35 +1,44 @@
 # 會議錄音與轉文字服務
 
-這是一個基於 Vue 3 的線上錄音與語音轉文字服務，**整合了 Google Cloud Speech-to-Text API**，讓使用者能夠方便地將語音內容轉換為文字。
+基於 Vue 3 + Vite 的線上錄音、語音轉文字與摘要服務，支援三種轉換引擎、可自訂轉錄/摘要模型，並整合 OpenAI 與 Google 的語音辨識與生成式 AI API。
+
+線上展示：https://chuangmaster.github.io/audio-transcripty/
 
 ## 🌟 功能特色
 
-- ✅ 網頁錄音功能（使用 Web Audio API）
-- ✅ **Google Speech-to-Text API 語音轉文字**（高準確度）
-- ✅ 支援多語言識別
-- ✅ 錄音檔案播放
-- ✅ 轉文字檔案下載
-- ✅ 摘要生成功能
-- ✅ 錄音記錄管理
-- ✅ 響應式設計
-- ✅ API 狀態實時監控
-- ✅ 轉換進度顯示
+- 🎙️ 現場錄音 / 📁 上傳音訊檔案（二擇一，畫面依模式切換）
+- 三種轉換引擎可選：
+  - ⚡ 快速轉換 (Web Speech API) — 免費、瀏覽器內建、無限長度，準確度較低
+  - 🎯 精準轉換 (Google Speech-to-Text) — 高準確度，同步 API 限制單次音訊 60 秒內
+  - 🚀 超強轉換 (OpenAI Whisper) — 無限長度，超過大小/時長會自動分割上傳
+- 轉錄模型依引擎顯示對應選項（Whisper-1 / GPT-4o Transcribe 系列 / Google latest_long 等），並可輸入自訂模型名稱
+- 轉錄提示詞 / 關鍵字欄位：輸入人名、專有名詞等關鍵字，提升辨識準確度
+- 摘要模型可選（OpenAI GPT 系列 / Google Gemini），依是否已設定對應 API Key 動態顯示可用選項，並支援自訂模型
+- API 狀態即時監控，可直接在畫面上輸入、儲存並重新驗證 API Key
+- 錄音記錄管理、轉文字下載、摘要生成
+- 響應式設計
 
 ## 支援語言
 
-- 繁體中文
-- 簡體中文
-- English (US)
-- 日本語
-- 한국어
+- 繁體中文 (zh-TW)
+- 簡體中文 (zh-CN)
+- English - US (en-US)
+- 日本語 (ja-JP)
+- 한국어 (ko-KR)
+
+> Google 引擎的可選轉錄模型會依語言動態調整，因為 Google 的模型與語言支援是綁定的（例如 `latest_long` 只支援部分語言，其餘語言僅能使用 `default`）。
 
 ## 技術架構
 
-- **前端框架**: Vue 3 (Composition API)
-- **建置工具**: Vite
-- **錄音技術**: MediaRecorder API
-- **語音識別**: **Google Cloud Speech-to-Text API**
-- **API 通訊**: RESTful API
+- **前端框架**: Vue 3 (Composition API) + Vite
+- **錄音技術**: MediaRecorder API / Web Speech API
+- **語音轉文字**:
+  - Google Cloud Speech-to-Text API
+  - OpenAI Audio Transcriptions API（`whisper-1`、`gpt-4o-transcribe`、`gpt-4o-mini-transcribe` 或自訂模型）
+- **摘要生成**:
+  - OpenAI Chat Completions API
+  - Google Generative Language API (Gemini)
+- **部署**: GitHub Actions 於推送到 `main` 分支時自動建置並發佈到 GitHub Pages
 
 ## 安裝與執行
 
@@ -39,31 +48,22 @@
 npm install
 ```
 
-### 2. 設定 Google Speech-to-Text API（重要！）
+### 2. 設定 API 密鑰（可選）
 
-**快速設定：**
-```bash
-npm run setup-env
+可以直接啟動應用後在畫面上的「API Key」輸入框貼上金鑰並儲存，或是先建立 `.env` / `.env.local`：
+
+```env
+VITE_GOOGLE_API_KEY=your_google_api_key
+VITE_OPENAI_API_KEY=your_openai_api_key
 ```
 
-**詳細指南請參考：** [GOOGLE_API_SETUP.md](./GOOGLE_API_SETUP.md)
-
-具體步驟：
-1. 前往 [Google Cloud Console](https://console.cloud.google.com/)
-2. 建立新專案並啟用 Cloud Speech-to-Text API
-3. 建立 API 密鑰
-4. 編輯 `.env.local` 檔案，設定你的 API 密鑰：
-   ```env
-   VITE_GOOGLE_API_KEY=YOUR_API_KEY_HERE
-   ```
+未設定 Google / OpenAI 金鑰時，仍可使用免費的「⚡ 快速轉換 (Web Speech API)」。
 
 ### 3. 啟動開發伺服器
 
 ```bash
 npm run dev
 ```
-
-應用程式將在 `http://localhost:5173` 啟動
 
 ### 4. 建置生產版本
 
@@ -73,179 +73,51 @@ npm run build
 
 ## 使用說明
 
-1. **開始錄音**: 點擊「開始錄音」按鈕，允許瀏覽器存取麥克風
-2. **選擇語言**: 在開始錄音前可以選擇要識別的語言
-3. **停止錄音**: 點擊「停止錄音」按鈕結束錄音
-4. **查看結果**: 系統會自動處理語音轉文字，並顯示在錄音列表中
-5. **播放錄音**: 使用音訊播放器重聽錄音內容
-6. **下載文字**: 點擊「下載文字」按鈕將轉換後的文字儲存為 TXT 檔案
-7. **生成摘要**: 點擊「生成摘要」按鈕快速瀏覽內容重點
-8. **刪除錄音**: 點擊「刪除」按鈕移除不需要的錄音
+1. 選擇「🎙️ 現場錄音」或「📁 上傳音訊檔案」其中一種模式
+2. 選擇轉換引擎與語言
+3. 使用 Google / OpenAI 引擎時，可進一步選擇轉錄模型，並視需要填寫轉錄提示詞 / 關鍵字
+4. 開始錄音或選擇檔案，系統會自動轉換為文字並顯示進度
+5. 選擇摘要模型（需先設定對應 API Key），點擊「生成摘要」
+6. 播放錄音、下載轉文字檔案，或刪除不需要的紀錄
 
-## 注意事項
+## 已知限制
 
-### 🔐 Google Speech-to-Text API 整合
+- **Google 精準轉換**走同步 `recognize` API，單次音訊需在 60 秒以內，超過會被拒絕並提示改用 OpenAI Whisper
+- 前端直接呼叫第三方 API，金鑰會存在瀏覽器記憶體中；正式環境建議改用後端代理並在 Google Cloud / OpenAI 後台限制金鑰的使用網域
 
-本專案已完全整合 Google Cloud Speech-to-Text API，提供高品質的語音識別功能。
+## ⚠️ 安全性提醒
 
-**關鍵特性：**
-- ✅ 自動語言識別和轉換
-- ✅ 自動標點符號添加
-- ✅ 使用長表單模型獲得最佳結果
-- ✅ 支援 12+ 語言
-- ✅ 實時進度反饋
-
-**詳細設定指南請參考：** [GOOGLE_API_SETUP.md](./GOOGLE_API_SETUP.md)
-
-該指南涵蓋：
-- 完整的 Google Cloud 設定步驟
-- 本地開發環境配置
-- 安全性最佳實踐
-- 生產環境部署建議
-- 常見問題排查
-- 費用優化建議
-
-### ⚠️ 安全性
-
-**開發環境：**
-- API 密鑰存儲在 `.env.local` 中
-- 確保 `.env.local` 在 `.gitignore` 中
-- 不要將密鑰提交到版本控制
-
-**生產環境：**
-- 強烈建議使用後端代理伺服器代替前端直接調用
-- 在 Google Cloud 中限制 API 密鑰只能從你的網域存取
-- 監控 API 使用量和成本
-
-### 📊 使用說明
-
-1. **檢查 API 連接**: 應用啟動時會自動驗證 API 狀態
-2. **選擇語言**: 在開始錄音前選擇識別語言
-3. **開始錄音**: 點擊「開始錄音」按鈕
-4. **停止錄音**: 點擊「停止錄音」按鈕
-5. **等待轉換**: 系統會自動上傳音訊並進行轉換（可見進度條）
-6. **查看結果**: 轉換後的文字會顯示在錄音列表中
-7. **下載文字**: 點擊「下載文字」以 TXT 格式保存
-8. **生成摘要**: 點擊「生成摘要」快速瀏覽重點
-
-### 🌐 支援語言
-
-- 繁體中文 (zh-TW)
-- 簡體中文 (zh-CN)
-- English - US (en-US)
-- English - UK (en-GB)
-- 日本語 (ja-JP)
-- 한국어 (ko-KR)
-- Français (fr-FR)
-- Deutsch (de-DE)
-- Español (es-ES)
-- Italiano (it-IT)
-- Português - Brazil (pt-BR)
-- Русский (ru-RU)
-- Tiếng Việt (vi-VN)
-- ไทย (th-TH)
+- `.env`、`.env.local` 已加入 `.gitignore`，切勿把含有真實金鑰的檔案提交到版本控制
+- 不要把 API 金鑰貼到對話、Issue、截圖或任何會被記錄下來的地方；一旦金鑰外流，請立即到 Google Cloud Console / OpenAI 後台註銷並重新產生
 
 ## 專案結構
 
 ```
-meeting-recorder/
-├── .env.example                    # 環境變數範本
-├── .gitignore                      # Git 忽略檔案
+audio-transcripty/
+├── .github/workflows/deploy.yml    # GitHub Actions：建置並部署到 GitHub Pages
+├── .env                            # 環境變數（僅放預設佔位字串，不納入版控）
 ├── index.html                      # HTML 入口檔案
 ├── package.json                    # 專案依賴設定
-├── vite.config.js                  # Vite 建置設定
+├── vite.config.js                  # Vite 建置設定（含 GitHub Pages base path）
 ├── README.md                       # 專案說明文件
-├── GOOGLE_API_SETUP.md             # Google API 設定指南
-├── RD.md                           # 需求規格書
 └── src/
     ├── main.js                     # Vue 應用程式入口
-    ├── App.vue                     # 主要元件（整合 Google API）
+    ├── App.vue                     # 主要元件（引擎/模型選擇、錄音、摘要、UI 狀態）
     ├── style.css                   # 全域樣式
     ├── config/
-    │   └── speechToTextConfig.js   # Google API 設定檔
+    │   └── speechToTextConfig.js   # API 設定與引擎中繼資料
     └── services/
-        └── speechToText.js         # Google Speech-to-Text 服務類
+        ├── speechToText.js         # Google Speech-to-Text 服務
+        ├── openaiWhisper.js        # OpenAI Whisper 轉錄服務（含分段上傳）
+        ├── webSpeechApi.js         # 瀏覽器 Web Speech API 封裝
+        ├── summarize.js            # OpenAI 摘要服務
+        └── googleSummarize.js      # Google Gemini 摘要服務
 ```
 
-## 核心功能模組
+## 部署
 
-### 1. Speech-to-Text 服務 (`src/services/speechToText.js`)
-- 封裝 Google Cloud Speech-to-Text API 調用
-- 音訊格式轉換
-- 進度回調功能
-- 錯誤處理
+推送到 `main` 分支會觸發 `.github/workflows/deploy.yml`：安裝依賴 → `npm run build` → 使用 `peaceiris/actions-gh-pages` 將 `dist/` 發佈到 GitHub Pages，通常幾分鐘內會反映在線上展示網址。
 
-### 2. 配置管理 (`src/config/speechToTextConfig.js`)
-- API 密鑰管理
-- 語言配置
-- 音訊參數設定
-- 超時設定
-
-### 3. Vue 主元件 (`src/App.vue`)
-- 錄音控制
-- 語言選擇
-- 進度監控
-- 結果顯示和管理
-
-## 開發指南
-
-### 更改 API 密鑰
-編輯 `.env.local` 檔案：
-```env
-VITE_GOOGLE_API_KEY=your_new_api_key_here
-```
-
-### 自訂語言支援
-編輯 `src/config/speechToTextConfig.js` 中的 `languages` 陣列。
-
-### 自訂音訊設定
-在 `src/config/speechToTextConfig.js` 中修改 `audio` 和 `apiParams` 物件。
-
-### 調試
-- 檢查瀏覽器開發者工具的 Console 標籤
-- 查看 Network 標籤中的 API 請求
-- 檢查 API 狀態指示器（頁面頂部）
-
-## 常見問題
-
-### 📋 完整 FAQ 和故障排除
-
-詳見 [GOOGLE_API_SETUP.md](./GOOGLE_API_SETUP.md) 中的「常見問題」部分
-
-### Q: 如何處理 CORS 錯誤？
-**A:** 確保：
-1. API 密鑰正確設定
-2. Google Cloud 中 API 限制已配置
-3. API 密鑰有正確的應用限制
-
-### Q: 轉換不準確怎麼辦？
-**A:** 
-- 確保音訊清晰，沒有背景噪音
-- 確認選擇的語言正確
-- 檢查音訊採樣率（推薦 16kHz）
-- 嘗試使用長表單模型
-
-### Q: 如何在生產環境中使用？
-**A:** 
-強烈建議使用後端代理伺服器。詳見 [GOOGLE_API_SETUP.md](./GOOGLE_API_SETUP.md) 中的「生產環境」部分。
-
-## 費用資訊
-
-Google Cloud Speech-to-Text 定價：
-- **免費配額**：每月 60 分鐘
-- **超過配額**：$0.024 / 分鐘
-
-詳細費用說明見 [GOOGLE_API_SETUP.md](./GOOGLE_API_SETUP.md)
-
-## 未來改進方向
-
-- [ ] 實時語音轉文字流式處理
-- [ ] 加入使用者認證系統
-- [ ] 雲端儲存功能
-- [ ] AI 智能摘要功能
-- [ ] 支援更多音訊格式
-- [ ] 批量轉換功能
-- [ ] 協作編輯功能
-- [ ] 多語言界面
+## License
 
 MIT License

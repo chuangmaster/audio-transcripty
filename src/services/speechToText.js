@@ -9,6 +9,31 @@ class SpeechToTextService {
   constructor(apiKey) {
     this.apiKey = apiKey
     this.baseUrl = 'https://speech.googleapis.com/v1/speech:recognize'
+    this.maxSyncDurationMs = 59000 // 同步 recognize 端點僅支援 60 秒內的音訊
+  }
+
+  /**
+   * 取得音訊時長 (毫秒)
+   * @param {Blob} audioBlob - 音訊檔案
+   * @returns {Promise<number>} 時長 (毫秒)
+   */
+  getAudioDuration(audioBlob) {
+    return new Promise((resolve, reject) => {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      const fileReader = new FileReader()
+
+      fileReader.onload = async () => {
+        try {
+          const audioBuffer = await audioContext.decodeAudioData(fileReader.result)
+          resolve(audioBuffer.duration * 1000)
+        } catch (error) {
+          reject(new Error(`無法解析音訊時長: ${error.message}`))
+        }
+      }
+
+      fileReader.onerror = () => reject(new Error('無法讀取音訊檔案'))
+      fileReader.readAsArrayBuffer(audioBlob)
+    })
   }
 
   /**
@@ -37,10 +62,21 @@ class SpeechToTextService {
    * @param {Blob} audioBlob - 音訊檔案
    * @param {string} languageCode - 語言代碼 (例如: zh-TW, en-US)
    * @param {Function} onProgress - 進度回呼函數
+   * @param {string} modelOverride - 手動指定的模型 (留空則依語言自動選擇)
+   * @param {string} prompt - 人名、專有名詞等關鍵字 (以逗號/頓號/換行分隔)，用來加強辨識
    * @returns {Promise<string>} 轉換結果
    */
-  async transcribeAudio(audioBlob, languageCode = 'zh-TW', onProgress = null) {
+  async transcribeAudio(audioBlob, languageCode = 'zh-TW', onProgress = null, modelOverride = '', prompt = '') {
     try {
+      // 準確轉換前先確認時長，因為同步 recognize 端點僅支援 60 秒內的音訊
+      onProgress?.({ status: '檢查音訊時長...', progress: 5 })
+      const durationMs = await this.getAudioDuration(audioBlob)
+      if (durationMs > this.maxSyncDurationMs) {
+        throw new Error(
+          `錄音時長 ${(durationMs / 1000).toFixed(0)} 秒，超過 Google 精準轉換同步 API 的 60 秒限制，請改用「🚀 超強轉換 (OpenAI Whisper)」或縮短音訊長度`
+        )
+      }
+
       // 將音訊 Blob 轉換為 Base64
       onProgress?.({ status: '準備音訊檔案...', progress: 10 })
       const base64Audio = await this.blobToBase64(audioBlob)
@@ -52,7 +88,12 @@ class SpeechToTextService {
       
       // 自動偵測音訊編碼
       const encoding = this.getAudioEncoding(audioBlob.type)
-      
+
+      // 將關鍵字提示詞拆成 Google Speech Adaptation 用的詞組清單
+      const phrases = prompt
+        ? prompt.split(/[,，、\n]+/).map((p) => p.trim()).filter(Boolean)
+        : []
+
       // 構建請求
       // 注意: WebM Opus 格式的 MediaRecorder 預設採樣率為 48000Hz
       const requestBody = {
@@ -63,8 +104,9 @@ class SpeechToTextService {
           ...(encoding.includes('LINEAR') && { sampleRateHertz: 48000 }),
           languageCode: languageCode,
           enableAutomaticPunctuation: true,
-          model: this.getModelForLanguage(languageCode), // 根據語言選擇合適的模型
+          model: modelOverride || this.getModelForLanguage(languageCode), // 手動指定，否則根據語言選擇合適的模型
           useEnhanced: true,
+          ...(phrases.length > 0 && { speechContexts: [{ phrases }] }),
         },
         audio: {
           content: audioContent,

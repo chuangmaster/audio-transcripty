@@ -45,12 +45,28 @@
           </div>
       </div>
 
+      <!-- 名詞說明：轉錄模型 vs 摘要模型 -->
+      <div class="model-explainer">
+        <div class="explainer-item">
+          <span class="explainer-icon">🎙️</span>
+          <div class="explainer-text">
+            <strong>轉錄模型</strong>：把錄音或音檔「轉成文字」的模型，在下方「選擇轉換引擎」設定。
+          </div>
+        </div>
+        <div class="explainer-item">
+          <span class="explainer-icon">📝</span>
+          <div class="explainer-text">
+            <strong>摘要模型</strong>：把轉出來的文字「整理成重點摘要」的模型，在下方「選擇摘要模型」設定，需要對應的 API Key 才會出現在選單中。
+          </div>
+        </div>
+      </div>
+
       <!-- 引擎選擇器 -->
       <div class="engine-selector">
         <label>選擇轉換引擎：</label>
         <div class="engine-options">
-          <button 
-            v-for="engine in availableEngines" 
+          <button
+            v-for="engine in availableEngines"
             :key="engine.type"
             @click="selectedEngine = engine.type"
             :class="['engine-btn', { active: selectedEngine === engine.type }]"
@@ -62,45 +78,100 @@
             <span v-if="engine.free" class="engine-free">🆓 免費</span>
           </button>
         </div>
+
+        <!-- 轉錄模型：跟著目前選擇的引擎顯示對應選項，用下拉選單讓目前選項一目瞭然 -->
+        <div class="model-select-row" v-if="selectedEngine === 'openai' || selectedEngine === 'google'">
+          <label for="stt-model-select">轉錄模型：</label>
+          <select id="stt-model-select" v-model="currentSttModelChoice">
+            <option v-for="m in currentSttModelOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+            <option value="custom">✏️ 自訂模型...</option>
+          </select>
+          <input
+            v-if="currentSttModelChoice === 'custom'"
+            type="text"
+            v-model="currentSttModelCustom"
+            placeholder="輸入自訂模型名稱，例如 gpt-4o-transcribe"
+            class="custom-model-input"
+          />
+          <p class="model-hint" v-if="currentSttModelHint">💡 {{ currentSttModelHint }}</p>
+
+          <div class="stt-prompt-field">
+            <label for="stt-prompt">轉錄提示詞 / 關鍵字（選填）：</label>
+            <textarea
+              id="stt-prompt"
+              v-model="sttPrompt"
+              rows="2"
+              placeholder="輸入人名、專有名詞等關鍵字，可提升轉錄準確度"
+            ></textarea>
+            <p class="model-hint">
+              💡 可編輯或整段替換成這場錄音會用到的關鍵字（人名、公司、術語等）；OpenAI 引擎會整段當作提示詞送出，Google 引擎會拆成關鍵字清單加強辨識。維持預設範例文字不做修改時不會送出。
+            </p>
+          </div>
+        </div>
       </div>
 
       <!-- 摘要模型選擇 -->
       <div class="summary-model-selector">
-        <label>選擇摘要模型：</label>
-        <div class="model-options">
-          <button 
-            v-for="m in summaryModelsOptions" 
-            :key="m.value"
-            @click="summaryModel = m.value"
-            :class="['model-btn', { active: summaryModel === m.value }]"
-            :title="m.value"
-          >
-            <span class="model-name">{{ m.label }}</span>
-          </button>
-        </div>
+        <label for="summary-model-select">選擇摘要模型：</label>
+        <select id="summary-model-select" v-model="summaryModelChoice">
+          <option v-for="m in availableSummaryModelsOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+          <option value="custom">✏️ 自訂模型...</option>
+        </select>
+        <input
+          v-if="summaryModelChoice === 'custom'"
+          type="text"
+          v-model="summaryModelCustom"
+          placeholder="輸入自訂模型名稱，gemini 開頭走 Google API，其餘走 OpenAI API"
+          class="custom-model-input"
+        />
+        <p class="model-hint" v-if="summaryModelHint">💡 {{ summaryModelHint }}</p>
+        <p class="model-hint" v-if="availableSummaryModelsOptions.length === 0">
+          ⚠️ 尚未設定有效的 Google 或 OpenAI API Key，請先在上方輸入並儲存 Key，才能使用預設摘要模型（仍可用「自訂模型」手動輸入）
+        </p>
       </div>
     </header>
 
     <main class="main-content">
       <!-- 錄音控制區 -->
       <div class="recording-section">
-        <div class="recording-controls">
-          <button 
-            v-if="!isRecording" 
-            @click="startRecording" 
+        <!-- 錄音 / 上傳檔案：二擇一模式切換 -->
+        <div class="input-mode-toggle">
+          <button
+            type="button"
+            :class="['mode-btn', { active: inputMode === 'record' }]"
+            @click="inputMode = 'record'"
+            :disabled="isRecording || isProcessing"
+          >
+            🎙️ 現場錄音
+          </button>
+          <button
+            type="button"
+            :class="['mode-btn', { active: inputMode === 'upload' }]"
+            @click="inputMode = 'upload'"
+            :disabled="isRecording || isProcessing || selectedEngine === 'webSpeech'"
+            :title="selectedEngine === 'webSpeech' ? '快速轉換 (Web Speech API) 不支援檔案上傳，請切換引擎' : ''"
+          >
+            📁 上傳音訊檔案
+          </button>
+        </div>
+
+        <div class="recording-controls" v-if="inputMode === 'record'">
+          <button
+            v-if="!isRecording"
+            @click="startRecording"
             class="btn btn-primary"
             :disabled="isProcessing"
           >
             <span class="icon">●</span> 開始錄音
           </button>
-          <button 
-            v-else 
-            @click="stopRecording" 
+          <button
+            v-else
+            @click="stopRecording"
             class="btn btn-danger"
           >
             <span class="icon">■</span> 停止錄音
           </button>
-          
+
           <div v-if="isRecording" class="recording-indicator">
             <span class="pulse"></span>
             <span>錄音中... {{ recordingTime }}</span>
@@ -108,15 +179,15 @@
         </div>
 
         <!-- 檔案上傳區 -->
-        <div class="upload-section">
-          <div class="upload-label">或上傳音訊檔案：</div>
+        <div class="upload-section" v-if="inputMode === 'upload'">
+          <div class="upload-label">上傳音訊檔案：</div>
           <label class="upload-btn">
             <span class="icon">📁</span> 選擇檔案
-            <input 
-              type="file" 
-              @change="handleFileUpload" 
+            <input
+              type="file"
+              @change="handleFileUpload"
               accept="audio/*"
-              :disabled="isProcessing || isRecording"
+              :disabled="isProcessing"
               style="display: none"
             />
           </label>
@@ -217,7 +288,7 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted, reactive, computed } from 'vue'
+import { ref, onUnmounted, reactive, computed, watch } from 'vue'
 import SpeechToTextService from './services/speechToText.js'
 import { WebSpeechApiService } from './services/webSpeechApi.js'
 import OpenAIWhisperService from './services/openaiWhisper.js'
@@ -354,8 +425,16 @@ const isProcessing = ref(false)
 const recordings = ref([])
 const selectedLanguage = ref('zh-TW')
 const selectedEngine = ref('webSpeech') // 預設使用 Web Speech API
-// 摘要模型設定
-const summaryModel = ref('gpt-3.5-turbo')
+const inputMode = ref('record') // 錄音 / 上傳檔案二擇一：'record' 或 'upload'
+
+// Web Speech API 不支援檔案上傳，切到該引擎時強制切回錄音模式
+watch(selectedEngine, (engine) => {
+  if (engine === 'webSpeech' && inputMode.value === 'upload') {
+    inputMode.value = 'record'
+  }
+})
+
+// 摘要模型設定 (summaryModelChoice 為預設值或 'custom'，summaryModel 為實際送出的模型名稱)
 const summaryModelsOptions = ref([
   { value: 'gpt-4o-mini', label: 'OpenAI: gpt-4o-mini (快速)' },
   { value: 'gpt-4o', label: 'OpenAI: gpt-4o (高品質)' },
@@ -363,6 +442,128 @@ const summaryModelsOptions = ref([
   { value: 'gemini-2.5-flash-lite', label: 'Google: Gemini 2.5 Flash Lite (成本低、快速)' },
   { value: 'gemini-2.5-flash', label: 'Google: Gemini 2.5 Flash (高品質)' }
 ])
+const summaryModelHints = {
+  'gpt-4o-mini': 'OpenAI 模型，速度快、成本低，適合大部分會議摘要',
+  'gpt-4o': 'OpenAI 高品質模型，摘要較完整，但成本較高',
+  'gpt-3.5-turbo': 'OpenAI 較舊但成本最低的模型',
+  'gemini-2.5-flash-lite': 'Google 模型，成本低、速度快',
+  'gemini-2.5-flash': 'Google 高品質模型',
+  custom: '手動輸入模型 ID，開頭為 gemini 會呼叫 Google API，其餘呼叫 OpenAI API',
+}
+const summaryModelChoice = ref('gpt-3.5-turbo')
+const summaryModelCustom = ref('')
+const summaryModel = computed(() =>
+  summaryModelChoice.value === 'custom'
+    ? (summaryModelCustom.value.trim() || 'gpt-3.5-turbo')
+    : summaryModelChoice.value
+)
+const summaryModelHint = computed(() => summaryModelHints[summaryModelChoice.value] || '')
+
+// 只顯示已設定有效 API Key 的摘要模型 (gemini 開頭需要 Google Key，其餘需要 OpenAI Key)
+const availableSummaryModelsOptions = computed(() =>
+  summaryModelsOptions.value.filter((m) =>
+    m.value.startsWith('gemini') ? apiStatus.googleAvailable : apiStatus.openaiAvailable
+  )
+)
+
+// 若目前選擇的預設模型因為 API Key 移除而不再可選，自動切換到第一個可用的模型
+watch(availableSummaryModelsOptions, (options) => {
+  if (summaryModelChoice.value === 'custom') return
+  const stillValid = options.some((o) => o.value === summaryModelChoice.value)
+  if (!stillValid && options.length > 0) {
+    summaryModelChoice.value = options[0].value
+  }
+}, { immediate: true })
+
+// OpenAI Whisper 轉錄模型設定
+const openaiModelsOptions = ref([
+  { value: 'whisper-1', label: 'Whisper-1 (穩定推薦)' },
+  { value: 'gpt-4o-mini-transcribe', label: 'GPT-4o mini Transcribe (快速、低成本)' },
+  { value: 'gpt-4o-transcribe', label: 'GPT-4o Transcribe (高準確度)' },
+])
+const openaiModelHints = {
+  'whisper-1': '穩定版本，經過長時間驗證，適合大部分情境',
+  'gpt-4o-mini-transcribe': '較新的模型，速度快、成本低，適合大量或即時轉錄',
+  'gpt-4o-transcribe': 'OpenAI 最新旗艦轉錄模型，準確度最高，成本也較高',
+  custom: '手動輸入你要使用的 OpenAI 轉錄模型 ID',
+}
+const openaiModelChoice = ref('whisper-1') // 選中的預設值 value，或 'custom'
+const openaiModelCustom = ref('')
+const openaiModel = computed(() =>
+  openaiModelChoice.value === 'custom'
+    ? (openaiModelCustom.value.trim() || 'whisper-1')
+    : openaiModelChoice.value
+)
+
+// Google Speech-to-Text 轉錄模型設定
+// Google 的模型支援與語言綁定，選錯組合會直接被 API 拒絕 (400 INVALID_ARGUMENT)，
+// 因此這裡的選項要跟著目前選擇的語言動態調整，只保留該語言真正支援的模型
+const googleLatestLongLanguages = ['en-US', 'en-GB', 'es-ES', 'fr-FR', 'de-DE', 'it-IT', 'pt-BR', 'ru-RU', 'ja-JP']
+const googleModelsOptions = computed(() => {
+  const options = [
+    { value: 'auto', label: '自動 (依語言選擇，推薦)' },
+    { value: 'default', label: 'Default (標準模型，支援所有語言)' },
+  ]
+  if (googleLatestLongLanguages.includes(selectedLanguage.value)) {
+    options.push({ value: 'latest_long', label: 'Latest Long (長音訊、高準確度)' })
+  }
+  return options
+})
+const googleModelHints = {
+  auto: '依錄音語言自動選擇合適的 Google 模型',
+  default: 'Google 標準模型，所有語言皆可使用',
+  latest_long: '適合較長的錄音，準確度較高（僅部分語言支援）',
+  custom: '手動輸入你要使用的 Google 模型名稱，需自行確認該模型是否支援目前選擇的語言',
+}
+const googleModelChoice = ref('auto')
+const googleModelCustom = ref('')
+const googleModel = computed(() => {
+  if (googleModelChoice.value === 'custom') return googleModelCustom.value.trim()
+  if (googleModelChoice.value === 'auto') return ''
+  return googleModelChoice.value
+})
+
+// 若切換語言後，目前選的模型不再受支援 (例如從 en-US 切到 zh-TW 時的 latest_long)，自動退回「自動」
+watch(googleModelsOptions, (options) => {
+  if (googleModelChoice.value === 'custom') return
+  const stillValid = options.some((o) => o.value === googleModelChoice.value)
+  if (!stillValid) {
+    googleModelChoice.value = 'auto'
+  }
+})
+
+// 依目前選擇的引擎，統一提供給下拉選單使用的轉錄模型狀態
+const currentSttModelOptions = computed(() =>
+  selectedEngine.value === 'openai' ? openaiModelsOptions.value : googleModelsOptions.value
+)
+const currentSttModelChoice = computed({
+  get: () => (selectedEngine.value === 'openai' ? openaiModelChoice.value : googleModelChoice.value),
+  set: (val) => {
+    if (selectedEngine.value === 'openai') openaiModelChoice.value = val
+    else googleModelChoice.value = val
+  }
+})
+const currentSttModelCustom = computed({
+  get: () => (selectedEngine.value === 'openai' ? openaiModelCustom.value : googleModelCustom.value),
+  set: (val) => {
+    if (selectedEngine.value === 'openai') openaiModelCustom.value = val
+    else googleModelCustom.value = val
+  }
+})
+const currentSttModelHint = computed(() => {
+  const hints = selectedEngine.value === 'openai' ? openaiModelHints : googleModelHints
+  return hints[currentSttModelChoice.value] || ''
+})
+
+// 轉錄提示詞 / 關鍵字：預設放一段範例文字，使用者可編輯或整段換掉
+const defaultSttPrompt = '例如：王小明、ABC科技、專案代號 Alpha（人名、公司、專有名詞等關鍵字，有助於提升轉錄準確度）'
+const sttPrompt = ref(defaultSttPrompt)
+// 維持預設範例文字未修改時視為「沒有輸入」，避免把範例內容當成真的關鍵字送出
+const sttPromptToSend = computed(() => {
+  const value = sttPrompt.value.trim()
+  return value && value !== defaultSttPrompt ? value : ''
+})
+
 const recordingTime = ref('00:00')
 const errorMessage = ref('')
 const processingStatus = ref('')
@@ -669,7 +870,9 @@ const processAudioToTextOpenAI = async (audioBlob, audioUrl) => {
       (progress) => {
         processingStatus.value = progress.status
         processingProgress.value = progress.progress
-      }
+      },
+      openaiModel.value,
+      sttPromptToSend.value
     )
 
     const recording = {
@@ -738,7 +941,9 @@ const processAudioToText = async (audioBlob, audioUrl) => {
       (progress) => {
         processingStatus.value = progress.status
         processingProgress.value = progress.progress
-      }
+      },
+      googleModel.value,
+      sttPromptToSend.value
     )
 
     const recording = {
@@ -973,7 +1178,9 @@ const processUploadedFile = async (file) => {
         (progress) => {
           processingStatus.value = `${progress.status} - ${file.name}`
           processingProgress.value = progress.progress
-        }
+        },
+        googleModel.value,
+        sttPromptToSend.value
       )
     } else if (selectedEngine.value === 'openai') {
       if (!openaiWhisperService) {
@@ -998,7 +1205,9 @@ const processUploadedFile = async (file) => {
         (progress) => {
           processingStatus.value = `${progress.status} - ${file.name}`
           processingProgress.value = progress.progress
-        }
+        },
+        openaiModel.value,
+        sttPromptToSend.value
       )
     }
     

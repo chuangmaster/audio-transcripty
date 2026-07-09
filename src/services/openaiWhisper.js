@@ -65,9 +65,11 @@ class OpenAIWhisperService {
    * @param {Blob} audioBlob - 音訊檔案
    * @param {string} languageCode - 語言代碼 (例如: zh)
    * @param {Function} onProgress - 進度回呼函數
+   * @param {string} model - 轉錄模型 (例如: whisper-1, gpt-4o-transcribe)
+   * @param {string} prompt - 提示詞 (人名、專有名詞等關鍵字，可提升準確度)
    * @returns {Promise<string>} 轉換結果
    */
-  async transcribeAudio(audioBlob, languageCode = 'zh', onProgress = null) {
+  async transcribeAudio(audioBlob, languageCode = 'zh', onProgress = null, model = 'whisper-1', prompt = '') {
     try {
       // 檢查音訊時長和檔案大小
       const duration = await this.getAudioDuration(audioBlob)
@@ -84,21 +86,26 @@ class OpenAIWhisperService {
       if (needsSplitting) {
         console.log(`需要分割: 檔案大小=${this.formatFileSize(fileSize)}, 時長=${this.formatDuration(duration)}`)
         return await this.transcribeChunkedAudio(
-          audioBlob, 
-          duration, 
-          languageCode, 
-          onProgress
+          audioBlob,
+          duration,
+          languageCode,
+          onProgress,
+          model,
+          prompt
         )
       } else {
         // 直接上傳
-        onProgress?.({ 
-          status: '上傳音訊至 OpenAI Whisper...', 
-          progress: 20 
+        onProgress?.({
+          status: '上傳音訊至 OpenAI Whisper...',
+          progress: 20
         })
-        
+
         const transcript = await this.uploadAndTranscribe(
-          audioBlob, 
-          languageCode
+          audioBlob,
+          languageCode,
+          'audio',
+          model,
+          prompt
         )
         
         onProgress?.({ 
@@ -120,9 +127,11 @@ class OpenAIWhisperService {
    * @param {number} totalDuration - 總時長 (毫秒)
    * @param {string} languageCode - 語言代碼
    * @param {Function} onProgress - 進度回呼
+   * @param {string} model - 轉錄模型
+   * @param {string} prompt - 提示詞 (人名、專有名詞等關鍵字)
    * @returns {Promise<string>} 合併後的轉錄文本
    */
-  async transcribeChunkedAudio(audioBlob, totalDuration, languageCode, onProgress) {
+  async transcribeChunkedAudio(audioBlob, totalDuration, languageCode, onProgress, model = 'whisper-1', prompt = '') {
     // 根據檔案大小和時長計算需要分割的片段數
     const fileSize = audioBlob.size
     
@@ -178,7 +187,9 @@ class OpenAIWhisperService {
         const transcript = await this.uploadAndTranscribe(
           chunk,
           languageCode,
-          `chunk_${i + 1}`
+          `chunk_${i + 1}`,
+          model,
+          prompt
         )
         
         transcripts.push(transcript)
@@ -277,9 +288,11 @@ class OpenAIWhisperService {
    * @param {Blob} audioBlob - 音訊 Blob
    * @param {string} languageCode - 語言代碼
    * @param {string} filename - 檔案名稱 (可選)
+   * @param {string} model - 轉錄模型
+   * @param {string} prompt - 提示詞 (人名、專有名詞等關鍵字)
    * @returns {Promise<string>} 轉錄文本
    */
-  async uploadAndTranscribe(audioBlob, languageCode, filename = 'audio') {
+  async uploadAndTranscribe(audioBlob, languageCode, filename = 'audio', model = 'whisper-1', prompt = '') {
     try {
       // 檢查檔案大小
       if (audioBlob.size > this.maxFileSize) {
@@ -289,9 +302,12 @@ class OpenAIWhisperService {
       // 創建 FormData
       const formData = new FormData()
       formData.append('file', audioBlob, `${filename}.webm`)
-      formData.append('model', 'whisper-1')
+      formData.append('model', model)
       formData.append('language', languageCode)
       formData.append('response_format', 'json')
+      if (prompt) {
+        formData.append('prompt', prompt)
+      }
 
       // 發送請求到 OpenAI API
       const response = await fetch(
